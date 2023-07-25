@@ -2,7 +2,7 @@ import os
 import sys
 
 import click
-from flask import Flask, render_template
+from flask import Flask, render_template, request, flash, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy  # 导入扩展类
 
 WIN = sys.platform.startswith('win')
@@ -25,10 +25,47 @@ class Movie(db.Model):  # 表名将会是 movie
     year = db.Column(db.String(4))  # 电影年份
 
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    movies = Movie.query.all()  # 读取所有电影记录
+    if request.method == "POST":
+        title = request.form.get('title')
+        year = request.form.get('year')
+        if not title or not year or len(year) > 4 or len(title) > 60:
+            flash("Invalid input")
+            return redirect(url_for('index'))
+        movie = Movie(title=title, year=year)
+        db.session.add(movie)
+        db.session.commit()
+        flash('Item created')
+        return redirect(url_for('index'))
+    movies = Movie.query.all()
     return render_template('index.html', movies=movies)
+
+
+@app.route('/movie/edit/<int:movie_id>', methods=['GET', 'POST'])
+def edit(movie_id):
+    movie = Movie.query.get_or_404(movie_id)
+    if request.method == "POST":
+        title = request.form['title']
+        year = request.form['year']
+        if not title or not year or len(year) != 4 or len(title) > 60:
+            flash("Invalid input.")
+            return redirect(url_for('edit', movie_id=movie_id))
+        movie.title = title
+        movie.year = year
+        db.session.commit()
+        flash('Item updated.')
+        return redirect(url_for('index'))
+    return render_template('edit.html', movie=movie)
+
+
+@app.route('/movie/delete/<int:movie_id>', methods=['POST'])  # 限定只接受 POST 请求
+def delete(movie_id):
+    movie = Movie.query.get_or_404(movie_id)  # 获取电影记录
+    db.session.delete(movie)  # 删除对应的记录
+    db.session.commit()  # 提交数据库会话
+    flash('Item deleted.')
+    return redirect(url_for('index'))  # 重定向回主页
 
 
 @app.cli.command()  # 注册为命令，可以传入 name 参数来自定义命令
